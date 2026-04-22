@@ -11,18 +11,34 @@ import {
 import { getCurrentUser } from "@/lib/actions/auth.action";
 import DisplayTechIcons from "@/components/DisplayTechIcons";
 
+// Define RouteParams interface
+interface RouteParams {
+  params: Promise<{
+    id: string;
+  }>;
+}
+
 const InterviewDetails = async ({ params }: RouteParams) => {
   const { id } = await params;
 
   const user = await getCurrentUser();
 
+  // ✅ Fix: Check if user exists and redirect if not
+  if (!user) {
+    redirect("/sign-in");
+  }
+
   const interview = await getInterviewById(id);
   if (!interview) redirect("/");
 
+  // ✅ Fix: Now user.id is guaranteed to exist
   const feedback = await getFeedbackByInterviewId({
     interviewId: id,
-    userId: user?.id!,
+    userId: user.id, // No non-null assertion needed
   });
+
+  // ✅ Fix: Safe way to get user name with fallback
+  const userName = user.name || "User";
 
   return (
     <>
@@ -48,8 +64,8 @@ const InterviewDetails = async ({ params }: RouteParams) => {
       </div>
 
       <Agent
-        userName={user?.name!}
-        userId={user?.id}
+        userName={userName}
+        userId={user.id}
         interviewId={id}
         type="interview"
         questions={interview.questions}
