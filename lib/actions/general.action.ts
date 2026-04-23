@@ -1,10 +1,9 @@
-// lib/actions/general.action.ts
 "use server";
 
 import { generateObject } from "ai";
 import { google } from "@ai-sdk/google";
 
-import { db } from "@/firebase/admin"; // Fixed import path
+import { db } from "@/firebase/admin";
 import { feedbackSchema } from "@/constants";
 
 export async function createFeedback(params: CreateFeedbackParams) {
@@ -19,7 +18,7 @@ export async function createFeedback(params: CreateFeedbackParams) {
       .join("");
 
     const { object } = await generateObject({
-      model: google("gemini-2.0-flash-001", {
+      model: google("gemini-3-flash-preview", {
         structuredOutputs: false,
       }),
       schema: feedbackSchema,
@@ -54,42 +53,22 @@ export async function createFeedback(params: CreateFeedbackParams) {
 
     if (feedbackId) {
       feedbackRef = db.collection("feedback").doc(feedbackId);
-      await feedbackRef.update(feedback);
     } else {
       feedbackRef = db.collection("feedback").doc();
-      await feedbackRef.set(feedback);
     }
 
-    // ✅ IMPORTANT: Also save to userInterviews to track completed interviews
-    const originalInterview = await db.collection("interviews").doc(interviewId).get();
-    const interviewData = originalInterview.data();
-    
-    if (interviewData) {
-      const userInterviewRef = db.collection("userInterviews").doc();
-      await userInterviewRef.set({
-        userId: userId,
-        originalInterviewId: interviewId,
-        role: interviewData.role,
-        type: interviewData.type,
-        level: interviewData.level,
-        techstack: interviewData.techstack,
-        questions: interviewData.questions,
-        feedbackId: feedbackRef.id,
-        completedAt: new Date().toISOString(),
-        finalized: true,
-      });
-      console.log("✅ Saved to userInterviews with ID:", userInterviewRef.id);
-    }
+    await feedbackRef.set(feedback);
 
     return { success: true, feedbackId: feedbackRef.id };
   } catch (error) {
     console.error("Error saving feedback:", error);
-    return { success: false, error: String(error) };
+    return { success: false };
   }
 }
 
 export async function getInterviewById(id: string): Promise<Interview | null> {
   const interview = await db.collection("interviews").doc(id).get();
+
   return interview.data() as Interview | null;
 }
 
@@ -130,66 +109,17 @@ export async function getLatestInterviews(
   })) as Interview[];
 }
 
-// ✅ FIXED: Now queries from userInterviews collection
 export async function getInterviewsByUserId(
   userId: string
 ): Promise<Interview[] | null> {
-  try {
-    console.log("📊 Fetching completed interviews for user:", userId);
-    
-    const userInterviews = await db
-      .collection("userInterviews")
-      .where("userId", "==", userId)
-      .where("finalized", "==", true)
-      .orderBy("completedAt", "desc")
-      .get();
+  const interviews = await db
+    .collection("interviews")
+    .where("userId", "==", userId)
+    .orderBy("createdAt", "desc")
+    .get();
 
-    const interviews = userInterviews.docs.map((doc) => ({
-      id: doc.id,
-      ...doc.data(),
-    })) as Interview[];
-    
-    console.log(`✅ Found ${interviews.length} completed interviews`);
-    return interviews;
-  } catch (error) {
-    console.error("❌ Error fetching user interviews:", error);
-    return [];
-  }
-}
-
-// Optional: Get all user interviews with feedback
-export async function getUserInterviewsWithFeedback(userId: string) {
-  try {
-    const userInterviews = await db
-      .collection("userInterviews")
-      .where("userId", "==", userId)
-      .where("finalized", "==", true)
-      .orderBy("completedAt", "desc")
-      .get();
-
-    const interviewsWithFeedback = await Promise.all(
-      userInterviews.docs.map(async (doc) => {
-        const data = doc.data();
-        let feedback = null;
-        
-        if (data.feedbackId) {
-          const feedbackDoc = await db.collection("feedback").doc(data.feedbackId).get();
-          if (feedbackDoc.exists) {
-            feedback = { id: feedbackDoc.id, ...feedbackDoc.data() };
-          }
-        }
-        
-        return {
-          id: doc.id,
-          ...data,
-          feedback,
-        };
-      })
-    );
-    
-    return interviewsWithFeedback;
-  } catch (error) {
-    console.error("Error fetching user interviews with feedback:", error);
-    return [];
-  }
+  return interviews.docs.map((doc) => ({
+    id: doc.id,
+    ...doc.data(),
+  })) as Interview[];
 }

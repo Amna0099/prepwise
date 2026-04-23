@@ -10,7 +10,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { getCurrentUser } from "@/lib/actions/auth.action";
 
-// Define RouteParams interface
 interface RouteParams {
   params: Promise<{
     id: string;
@@ -21,7 +20,6 @@ const Feedback = async ({ params }: RouteParams) => {
   const { id } = await params;
   const user = await getCurrentUser();
 
-  // ✅ Fix: Check if user exists first
   if (!user) {
     redirect("/sign-in");
   }
@@ -29,11 +27,11 @@ const Feedback = async ({ params }: RouteParams) => {
   const interview = await getInterviewById(id);
   if (!interview) redirect("/");
 
-  // ✅ Fix: Pass userId safely (user exists here because we checked above)
   const feedback = await getFeedbackByInterviewId({
     interviewId: id,
-    userId: user.id, // No non-null assertion needed
+    userId: user.id,
   });
+  console.log("Feedback data:", feedback); // Debug log to check feedback data
 
   return (
     <section className="section-feedback">
@@ -52,7 +50,7 @@ const Feedback = async ({ params }: RouteParams) => {
             <p>
               Overall Impression:{" "}
               <span className="text-primary-200 font-bold">
-                {feedback?.totalScore ?? "N/A"}
+                {feedback?.totalScore}
               </span>
               /100
             </p>
@@ -72,7 +70,7 @@ const Feedback = async ({ params }: RouteParams) => {
 
       <hr />
 
-      <p>{feedback?.finalAssessment ?? "No assessment available"}</p>
+      <p>{feedback?.finalAssessment}</p>
 
       {/* Interview Breakdown */}
       <div className="flex flex-col gap-4">
