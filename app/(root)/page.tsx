@@ -62,6 +62,7 @@ async function Home() {
               />
             ))
           ) : (
+            console.log("interview data:", userInterviews), // Debug log to check interview data
             <p>You haven&apos;t taken any interviews yet</p>
           )}
         </div>

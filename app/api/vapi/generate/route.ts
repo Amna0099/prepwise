@@ -38,6 +38,7 @@ export async function POST(request: Request) {
     };
 
     await db.collection("interviews").add(interview);
+    console.log("Interview created successfully:", interview);
 
     return Response.json({ success: true }, { status: 200 });
   } catch (error) {

@@ -8,6 +8,7 @@ import { auth } from "@/firebase/client";
 import { useForm } from "react-hook-form";
 import { useRouter } from "next/navigation";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { FirebaseError } from "firebase/app";
 
 import {
   createUserWithEmailAndPassword,
@@ -22,9 +23,22 @@ import FormField from "./FormField";
 
 const authFormSchema = (type: FormType) => {
   return z.object({
-    name: type === "sign-up" ? z.string().min(3) : z.string().optional(),
-    email: z.string().email(),
-    password: z.string().min(3),
+    name:
+      type === "sign-up"
+        ? z.string().min(3, "Name must be at least 3 characters")
+        : z.string().optional(),
+   email: z
+  .string()
+  .email()
+  .refine(
+    (email) => {
+      const allowedDomains = ["gmail.com", "yahoo.com", "outlook.com"];
+      const domain = email.split("@")[1];
+      return allowedDomains.includes(domain);
+    },
+    { message: "Please use a Gmail, Yahoo, or Outlook address" }
+  ),
+    password: z.string().min(6, "Password must be at least 6 characters"),
   });
 };
 
@@ -41,65 +55,88 @@ const AuthForm = ({ type }: { type: FormType }) => {
     },
   });
 
-  const onSubmit = async (data: z.infer<typeof formSchema>) => {
-    try {
-      if (type === "sign-up") {
-        const { name, email, password } = data;
+ const onSubmit = async (data: z.infer<typeof formSchema>) => {
+  try {
+    if (type === "sign-up") {
+      const { name, email, password } = data;
 
-        const userCredential = await createUserWithEmailAndPassword(
-          auth,
-          email,
-          password
-        );
+      const userCredential = await createUserWithEmailAndPassword(
+        auth,
+        email,
+        password
+      );
 
-        const result = await signUp({
-          uid: userCredential.user.uid,
-          name: name!,
-          email,
-          password,
-        });
+      const result = await signUp({
+        uid: userCredential.user.uid,
+        name: name!,
+        email,
+        password,
+      });
 
-        if (!result.success) {
-          toast.error(result.message);
-          return;
-        }
-
-        toast.success("Account created successfully. Please sign in.");
-        router.push("/sign-in");
-      } else {
-        const { email, password } = data;
-
-        const userCredential = await signInWithEmailAndPassword(
-          auth,
-          email,
-          password
-        );
-
-        const idToken = await userCredential.user.getIdToken();
-        if (!idToken) {
-          toast.error("Sign in Failed. Please try again.");
-          return;
-        }
-
-        const result = await signIn({
-          email,
-          idToken,
-        });
-
-        if (result.success) {
-          toast.success("Signed in successfully.");
-          window.location.href = "/";
-        } else {
-          toast.error(result.message);
-        }
+      if (!result.success) {
+        toast.error(result.message);
+        return;
       }
-    } catch (error) {
-      console.log(error);
-      // Use error message safely without 'any'
-      const errorMessage = error instanceof Error ? error.message : "Please try again";
+
+      toast.success("Account created successfully. Please sign in.");
+      router.push("/sign-in");
+    } else {
+      const { email, password } = data;
+
+      const userCredential = await signInWithEmailAndPassword(
+        auth,
+        email,
+        password
+      );
+
+      const idToken = await userCredential.user.getIdToken();
+      if (!idToken) {
+        toast.error("Sign in Failed. Please try again.");
+        return;
+      }
+
+      const result = await signIn({ email, idToken });
+
+      if (result.success) {
+        toast.success("Signed in successfully.");
+        window.location.href = "/";
+      } else {
+        toast.error(result.message);
+      }
+    }
+  } catch (error) {
+    // Handle Firebase-specific errors
+    if (error instanceof FirebaseError) {
+      switch (error.code) {
+        case "auth/user-not-found":
+        case "auth/invalid-credential":
+          toast.error("No account found with this email.");
+          break;
+        case "auth/wrong-password":
+          toast.error("Incorrect password. Please try again.");
+          break;
+        case "auth/invalid-email":
+          toast.error("Invalid email address.");
+          break;
+        case "auth/too-many-requests":
+          toast.error("Too many failed attempts. Please try again later.");
+          break;
+        case "auth/email-already-in-use":
+          toast.error("An account with this email already exists.");
+          break;
+        case "auth/weak-password":
+          toast.error("Password should be at least 6 characters.");
+          break;
+        default:
+          toast.error("Authentication failed. Please try again.");
+      }
+    } else {
+      const errorMessage =
+        error instanceof Error ? error.message : "Please try again";
       toast.error(`There was an error: ${errorMessage}`);
     }
-  };
+  }
+};
 
   const isSignIn = type === "sign-in";
 
